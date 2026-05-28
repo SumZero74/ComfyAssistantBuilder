@@ -1,0 +1,260 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b1220;
+  --panel: #111a27;
+  --panel2: #0f1724;
+  --line: #2e3f55;
+  --text: #dce7f7;
+  --muted: #91a3ba;
+  --accent: #20c7ff;
+  --accent2: #7c4dff;
+  --good: #42d392;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top left, rgba(32, 199, 255, 0.10), transparent 34%), var(--bg);
+  color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.shell {
+  max-width: 1420px;
+  margin: 0 auto;
+  padding: 28px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  background: #101827;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+h1, h2, p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 30px;
+}
+
+p, .status {
+  color: var(--muted);
+}
+
+.status {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.builder, .result, .monitor {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+.monitor {
+  position: sticky;
+  top: 18px;
+}
+
+.mode-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.lora-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.lora-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 96px;
+  gap: 8px;
+  align-items: end;
+}
+
+.trigger-words {
+  grid-column: 2 / 4;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #0b0f14;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.trigger-words.has-trigger {
+  color: var(--text);
+  border-color: rgba(66, 211, 146, 0.55);
+  background: rgba(66, 211, 146, 0.08);
+}
+
+.prompt-composer {
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.prompt-actions {
+  margin-top: 10px;
+}
+
+.toggle-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+
+.toggle-line input {
+  width: auto;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+textarea, input, select {
+  width: 100%;
+  background: #0e1218;
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 10px;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+button {
+  border: 0;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-weight: 650;
+  color: #07100c;
+  background: var(--good);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button + button {
+  background: var(--accent2);
+  color: #f7fbff;
+}
+
+.mode {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+}
+
+.mode.active {
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  color: #06101a;
+}
+
+.preview-window {
+  min-height: 320px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #070b11;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  margin: 12px 0 16px;
+}
+
+.preview-window img,
+.preview-window video {
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  display: block;
+  background: #05070b;
+}
+
+.empty-preview {
+  color: var(--muted);
+  padding: 18px;
+  text-align: center;
+}
+
+pre {
+  overflow: auto;
+  max-height: 420px;
+  background: #090c10;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .topbar, .grid, .lora-stack, .workspace {
+    grid-template-columns: 1fr;
+    display: block;
+  }
+  .field, .lora-row {
+    margin-bottom: 12px;
+  }
+}

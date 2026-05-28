@@ -1,0 +1,248 @@
+#cab-panel {
+  position: fixed;
+  right: 18px;
+  top: 64px;
+  width: min(920px, calc(100vw - 36px));
+  max-height: calc(100vh - 82px);
+  overflow: auto;
+  z-index: 999999;
+  background: #0b1220;
+  color: #dce7f7;
+  border: 1px solid #2e3f55;
+  border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+  font: 13px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#cab-panel[hidden] {
+  display: none;
+}
+
+#cab-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid #2e3f55;
+  background: #101827;
+}
+
+#cab-panel h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+#cab-panel .cab-subtitle {
+  color: #91a3ba;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+#cab-panel button {
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #42d392;
+  color: #07100c;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#cab-panel .cab-close {
+  background: transparent;
+  color: #eef4ff;
+  padding: 4px 8px;
+}
+
+#cab-panel .body {
+  padding: 14px;
+}
+
+#cab-panel label {
+  display: block;
+  color: #9ca9bb;
+  margin: 8px 0 4px;
+}
+
+#cab-panel textarea,
+#cab-panel input,
+#cab-panel select {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0b0f14;
+  border: 1px solid #344150;
+  color: #eef4ff;
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+}
+
+#cab-panel textarea {
+  min-height: 128px;
+  resize: vertical;
+}
+
+#cab-panel .cab-mode-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid #2e3f55;
+  border-radius: 8px;
+  background: #0f1724;
+  margin-bottom: 12px;
+}
+
+#cab-panel .cab-mode-strip button {
+  background: transparent;
+  color: #91a3ba;
+  border: 1px solid transparent;
+}
+
+#cab-panel .cab-mode-strip button.active {
+  background: linear-gradient(90deg, #20c7ff, #7c4dff);
+  color: #06101a;
+}
+
+#cab-panel .cab-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 12px;
+  align-items: stretch;
+}
+
+#cab-panel .cab-viewer {
+  min-height: 210px;
+  height: 100%;
+  border: 1px solid #2e3f55;
+  border-radius: 8px;
+  background: #05080d;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #91a3ba;
+  text-align: center;
+}
+
+#cab-panel .cab-viewer img,
+#cab-panel .cab-viewer video {
+  width: 100%;
+  height: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  background: #05080d;
+}
+
+#cab-panel .cab-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+#cab-panel .cab-stats div {
+  border: 1px solid #2e3f55;
+  border-radius: 8px;
+  background: #0f1724;
+  padding: 8px;
+}
+
+#cab-panel .cab-stats b,
+#cab-panel .cab-stats span {
+  display: block;
+}
+
+#cab-panel .cab-stats span {
+  color: #91a3ba;
+  font-size: 11px;
+}
+
+#cab-panel .row {
+  display: grid;
+  grid-template-columns: 1fr 90px;
+  gap: 8px;
+}
+
+#cab-panel .cab-loras {
+  display: grid;
+  gap: 4px;
+}
+
+#cab-panel .cab-trigger {
+  grid-column: 1 / 3;
+  min-height: 30px;
+  border: 1px solid #344150;
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: #080b0f;
+  color: #9ca9bb;
+  overflow-wrap: anywhere;
+}
+
+#cab-panel .cab-trigger.has-trigger {
+  color: #eef4ff;
+  border-color: rgba(66, 211, 146, 0.58);
+  background: rgba(66, 211, 146, 0.08);
+}
+
+#cab-panel .cab-toggle-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#cab-panel .cab-toggle-line input {
+  width: auto;
+}
+
+#cab-panel .cab-composer-row {
+  align-items: end;
+}
+
+#cab-panel .actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+#cab-panel pre {
+  max-height: 150px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: #080b0f;
+  border: 1px solid #344150;
+  border-radius: 6px;
+  padding: 8px;
+  color: #cfe0f5;
+}
+
+@media (max-width: 760px) {
+  #cab-panel {
+    right: 8px;
+    top: 56px;
+    width: calc(100vw - 16px);
+  }
+
+  #cab-panel .cab-main-grid,
+  #cab-panel .row {
+    grid-template-columns: 1fr;
+  }
+
+  #cab-panel .cab-trigger {
+    grid-column: 1;
+  }
+}
+
+#cab-toggle {
+  position: fixed;
+  right: 18px;
+  top: 18px;
+  z-index: 999999;
+  border: 0;
+  border-radius: 8px;
+  background: #42d392;
+  color: #07100c;
+  padding: 9px 12px;
+  font: 700 13px system-ui, sans-serif;
+  cursor: pointer;
+}

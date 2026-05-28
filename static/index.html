@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comfy Assistant Builder</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <h1>Comfy Assistant Builder</h1>
+        <p>Build, load, and run local ComfyUI image or video workflows from one control surface.</p>
+      </div>
+      <div id="status" class="status">Checking ComfyUI...</div>
+    </header>
+
+    <section class="workspace">
+      <section class="builder">
+        <div class="mode-strip" aria-label="Media type">
+          <button class="mode active" type="button" data-media="image">Image</button>
+          <button class="mode" type="button" data-media="video">Video</button>
+        </div>
+
+        <div class="field">
+          <label for="prompt">Workflow request</label>
+          <textarea id="prompt" rows="5">Flux image workflow with kwingo LoRA, 1024 square, photoreal portrait, save image</textarea>
+        </div>
+
+        <div class="grid">
+          <div class="field">
+            <label for="recipe">Recipe</label>
+            <select id="recipe">
+              <option value="flux_lora" data-media="image">Flux image with LoRA stack</option>
+              <option value="flux_base" data-media="image">Flux base image</option>
+              <option value="wan_t2v" data-media="video">Wan 2.2 text-to-video</option>
+              <option value="ltxv_t2v" data-media="video">LTXV text-to-video</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="name">Workflow name</label>
+            <input id="name" type="text" value="Assistant Flux LoRA">
+          </div>
+        </div>
+
+        <div class="lora-stack" aria-label="LoRA stack">
+          <div class="lora-row" data-lora-slot>
+            <label>LoRA 1</label>
+            <select class="lora-select"></select>
+            <input class="lora-strength" type="number" min="-2" max="2" step="0.05" value="0.75" aria-label="LoRA 1 strength">
+            <div class="trigger-words">Choose a LoRA to see trigger words.</div>
+          </div>
+          <div class="lora-row" data-lora-slot>
+            <label>LoRA 2</label>
+            <select class="lora-select"></select>
+            <input class="lora-strength" type="number" min="-2" max="2" step="0.05" value="0.45" aria-label="LoRA 2 strength">
+            <div class="trigger-words">No LoRA selected.</div>
+          </div>
+          <div class="lora-row" data-lora-slot>
+            <label>LoRA 3</label>
+            <select class="lora-select"></select>
+            <input class="lora-strength" type="number" min="-2" max="2" step="0.05" value="0.30" aria-label="LoRA 3 strength">
+            <div class="trigger-words">No LoRA selected.</div>
+          </div>
+          <div class="lora-row" data-lora-slot>
+            <label>LoRA 4</label>
+            <select class="lora-select"></select>
+            <input class="lora-strength" type="number" min="-2" max="2" step="0.05" value="0.25" aria-label="LoRA 4 strength">
+            <div class="trigger-words">No LoRA selected.</div>
+          </div>
+        </div>
+
+        <div class="prompt-composer">
+          <label class="toggle-line">
+            <input id="enable-prompt-composer" type="checkbox">
+            <span>Enable LoRA prompt composer</span>
+          </label>
+          <div class="field">
+            <label for="scene">Scene idea</label>
+            <input id="scene" type="text" value="cinematic portrait in a neon city at night" disabled>
+          </div>
+          <div class="field">
+            <label for="creative-prompt">Prompt from selected LoRAs</label>
+            <textarea id="creative-prompt" rows="4" placeholder="Select LoRAs, enable composer, then write a prompt." disabled></textarea>
+          </div>
+          <div class="actions prompt-actions">
+            <button id="write-prompt" type="button" disabled>Write Prompt</button>
+            <button id="use-prompt" type="button" disabled>Use Prompt</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="build">Build + Save</button>
+          <button id="download" disabled>Download JSON</button>
+        </div>
+      </section>
+
+      <aside class="monitor">
+        <h2>Run Monitor</h2>
+        <div class="preview-window" id="preview-window">
+          <div class="empty-preview">Generated media appears here when run from the ComfyUI panel.</div>
+        </div>
+        <div class="result">
+          <h2>Result</h2>
+          <pre id="output">No workflow generated yet.</pre>
+        </div>
+      </aside>
+    </section>
+  </main>
+  <script src="/config.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
