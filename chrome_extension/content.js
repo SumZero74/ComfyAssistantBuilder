@@ -55,6 +55,7 @@ function cabSetMediaType(panel, type) {
   } else {
     panel.querySelector('#cab-prompt').value = 'Flux image workflow, 1024 square, photoreal portrait, cinematic lighting, high detail, save image';
   }
+  panel.querySelector('#cab-video-length-wrap').hidden = cabMediaType !== 'video';
   populateCabLoras(panel);
 }
 
@@ -214,6 +215,10 @@ function buildPanel() {
           <label>Workflow name</label>
           <input id="cab-name" value="Assistant Image">
         </div>
+        <div id="cab-video-length-wrap" hidden>
+          <label>Length</label>
+          <input id="cab-video-length" type="number" min="1" max="1000" step="1" value="81">
+        </div>
       </div>
       <div class="cab-main-grid">
         <div class="cab-left">
@@ -360,6 +365,7 @@ function buildPanel() {
       media_type: cabMediaType,
       recipe: panel.querySelector('#cab-recipe').value,
       quality: panel.querySelector('#cab-quality').value,
+      video_length_frames: cabMediaType === 'video' ? panel.querySelector('#cab-video-length').value : '',
       loras,
       lora: loras[0] ? loras[0].name : '',
       lora_strength: loras[0] ? loras[0].strength : 0.75,

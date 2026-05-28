@@ -14,6 +14,7 @@ The assistant can build starter workflows for Flux image generation and Wan/LTXV
 - Image/video mode switch.
 - Strict media routing: image mode builds image workflows only, video mode builds video workflows only.
 - Quality presets that patch sampler, resolution, FPS, and frame settings.
+- Video length control for overriding the default frame count.
 - Flux image workflows with optional LoRA stack.
 - Wan 2.2, Flux-style Wan, and LTXV text-to-video starter workflows.
 - Local LoRA picker with trigger word detection from safetensors metadata.
@@ -194,6 +195,8 @@ The assistant has three quality presets:
 - `Max Quality`: higher image/video sampler settings, larger video latent settings where the bundled workflow supports them, and MP4/H.264 video saving.
 
 Max Quality can take substantially longer and use more VRAM.
+
+Video mode also exposes a `Length` field. This is the generated frame count, so higher values make longer videos and can substantially increase render time and VRAM pressure.
 
 ## Workflow Output Paths
 

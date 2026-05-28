@@ -728,6 +728,18 @@ def quality_profile(value):
     return QUALITY_PROFILES.get(str(value or "balanced").lower(), QUALITY_PROFILES["balanced"])
 
 
+def normalize_video_length(value):
+    if value in (None, ""):
+        return None
+    try:
+        frames = int(float(value))
+    except (TypeError, ValueError):
+        raise ValueError("Video length must be a number of frames")
+    if frames < 1:
+        raise ValueError("Video length must be at least 1 frame")
+    return min(frames, 1000)
+
+
 def set_node_widget(node_data, index, value):
     widgets = node_data.setdefault("widgets_values", [])
     while len(widgets) <= index:
@@ -810,8 +822,9 @@ def load_video_template(recipe):
     raise FileNotFoundError(f"No {family} video template found. Checked: {checked}")
 
 
-def patch_wan_template(wf, prompt, lora_slots, name, quality, recipe="wan_t2v"):
+def patch_wan_template(wf, prompt, lora_slots, name, quality, recipe="wan_t2v", video_length=None):
     profile = quality_profile(quality)
+    frame_count = video_length or 81
     patch_prompt_nodes(wf, prompt)
     patch_save_video_nodes(wf, "video/Assistant_Wan")
     for node_data in wf.get("nodes", []):
@@ -835,14 +848,23 @@ def patch_wan_template(wf, prompt, lora_slots, name, quality, recipe="wan_t2v"):
         elif ntype == "EmptyHunyuanLatentVideo":
             set_node_widget(node_data, 0, profile["wan_width"])
             set_node_widget(node_data, 1, profile["wan_height"])
+            set_node_widget(node_data, 2, frame_count)
     wf.setdefault("extra", {}).setdefault("assistant_builder", {})
     wf["extra"]["assistant_builder"].update(
-        {"media_type": "video", "recipe": recipe, "prompt": prompt, "name": name, "quality": quality}
+        {
+            "media_type": "video",
+            "recipe": recipe,
+            "prompt": prompt,
+            "name": name,
+            "quality": quality,
+            "video_length_frames": frame_count,
+        }
     )
 
 
-def patch_ltxv_template(wf, prompt, lora_slots, name, quality):
+def patch_ltxv_template(wf, prompt, lora_slots, name, quality, video_length=None):
     profile = quality_profile(quality)
+    frame_count = video_length or profile["ltxv_frames"]
     patch_prompt_nodes(wf, prompt)
     patch_save_video_nodes(wf, "video/Assistant_LTXV")
     for node_data in wf.get("nodes", []):
@@ -856,7 +878,7 @@ def patch_ltxv_template(wf, prompt, lora_slots, name, quality):
         elif ntype == "EmptyLTXVLatentVideo":
             set_node_widget(node_data, 0, profile["ltxv_width"])
             set_node_widget(node_data, 1, profile["ltxv_height"])
-            set_node_widget(node_data, 2, profile["ltxv_frames"])
+            set_node_widget(node_data, 2, frame_count)
         elif ntype == "LTXVScheduler":
             set_node_widget(node_data, 0, profile["ltxv_steps"])
         elif ntype == "SamplerCustom":
@@ -867,7 +889,14 @@ def patch_ltxv_template(wf, prompt, lora_slots, name, quality):
             set_node_widget(node_data, 0, profile["ltxv_fps"])
     wf.setdefault("extra", {}).setdefault("assistant_builder", {})
     wf["extra"]["assistant_builder"].update(
-        {"media_type": "video", "recipe": "ltxv_t2v", "prompt": prompt, "name": name, "quality": quality}
+        {
+            "media_type": "video",
+            "recipe": "ltxv_t2v",
+            "prompt": prompt,
+            "name": name,
+            "quality": quality,
+            "video_length_frames": frame_count,
+        }
     )
 
 
@@ -911,14 +940,14 @@ def validate_workflow_model_files(wf):
         raise FileNotFoundError("Missing required ComfyUI model files: " + "; ".join(missing))
 
 
-def video_workflow(prompt, *, recipe, loras=None, name="Assistant Video", quality="balanced"):
+def video_workflow(prompt, *, recipe, loras=None, name="Assistant Video", quality="balanced", video_length=None):
     wf, family, src = load_video_template(recipe)
     lora_slots = normalize_lora_slots(prompt, loras, recipe=recipe)
     wf["id"] = slugify(name).lower().replace(" ", "-")
     if recipe in {"wan_t2v", "flux_wan_t2v"}:
-        patch_wan_template(wf, prompt, lora_slots, name, quality, recipe=recipe)
+        patch_wan_template(wf, prompt, lora_slots, name, quality, recipe=recipe, video_length=video_length)
     elif recipe == "ltxv_t2v":
-        patch_ltxv_template(wf, prompt, lora_slots, name, quality)
+        patch_ltxv_template(wf, prompt, lora_slots, name, quality, video_length=video_length)
     wf.setdefault("extra", {}).setdefault("assistant_builder", {})
     wf["extra"]["assistant_builder"]["template"] = str(src)
     validate_workflow_model_files(wf)
@@ -977,6 +1006,7 @@ def build_workflow(payload):
     recipe = payload.get("recipe") or infer_recipe(prompt)
     media_type = normalize_media_type(payload.get("media_type"), recipe)
     quality = str(payload.get("quality") or "balanced").lower()
+    video_length = normalize_video_length(payload.get("video_length_frames"))
     if media_type == "image" and recipe not in {"flux_lora", "flux_base"}:
         recipe = "flux_lora"
     elif media_type == "video" and recipe in {"flux_lora", "flux_base"}:
@@ -1002,6 +1032,7 @@ def build_workflow(payload):
             loras=payload.get("loras"),
             name=name,
             quality=quality,
+            video_length=video_length,
         )
     return wf, family, name
 

@@ -48,6 +48,7 @@ function setMediaType(type) {
     recipe.value = mediaType === 'video' ? 'wan_t2v' : 'flux_lora';
   }
   document.getElementById('name').value = mediaType === 'video' ? 'Assistant Video' : 'Assistant Image';
+  document.getElementById('video-length-field').hidden = mediaType !== 'video';
   populateLoraSlots();
 }
 
@@ -203,6 +204,7 @@ function workflowPayload() {
     media_type: mediaType,
     recipe: document.getElementById('recipe').value,
     quality: document.getElementById('quality').value,
+    video_length_frames: mediaType === 'video' ? document.getElementById('video-length').value : '',
     loras,
     lora: loras[0] ? loras[0].name : '',
     lora_strength: loras[0] ? loras[0].strength : 0.75,

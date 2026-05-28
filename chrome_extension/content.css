@@ -132,7 +132,7 @@
 
 #cab-panel .cab-toolbar-grid {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-columns: 160px minmax(0, 1fr) 110px;
   gap: 12px;
   margin-bottom: 10px;
 }
