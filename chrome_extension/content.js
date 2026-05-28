@@ -49,6 +49,12 @@ function cabSetMediaType(panel, type) {
   if (recipe.selectedOptions[0]?.dataset.media !== cabMediaType) {
     recipe.value = cabMediaType === 'video' ? 'wan_t2v' : 'flux_lora';
   }
+  panel.querySelector('#cab-name').value = cabMediaType === 'video' ? 'Assistant Video' : 'Assistant Image';
+  if (cabMediaType === 'video') {
+    panel.querySelector('#cab-prompt').value = 'A cinematic text-to-video shot with clear subject motion, natural lighting, consistent anatomy, detailed environment, smooth camera movement, high quality video';
+  } else {
+    panel.querySelector('#cab-prompt').value = 'Flux image workflow, 1024 square, photoreal portrait, cinematic lighting, high detail, save image';
+  }
   populateCabLoras(panel);
 }
 
@@ -57,16 +63,15 @@ function populateCabLoras(panel) {
   panel.querySelectorAll('[data-cab-lora-slot]').forEach((row, index) => {
     const select = row.querySelector('.cab-lora');
     const prior = select.value;
-  select.innerHTML = '';
-  const empty = el('option', { value: '' }, items.length ? (select.dataset.primary === 'true' ? 'Auto pick compatible LoRA' : 'None') : 'No compatible LoRAs');
-  select.appendChild(empty);
+    select.innerHTML = '';
+    const empty = el('option', { value: '' }, items.length ? 'None - no LoRA' : 'No compatible LoRAs');
+    select.appendChild(empty);
     for (const item of items) {
       const trigger = item.trigger_words?.length ? ` - ${item.trigger_words.join(', ')}` : '';
       const opt = el('option', { value: item.name }, `${item.name.replace(/\.safetensors$/i, '')} [${item.family}]${trigger}`);
       if (item.name === prior) opt.selected = true;
-      if (!prior && index === 0 && item.name.toLowerCase().includes('kwingo')) opt.selected = true;
-    select.appendChild(opt);
-  }
+      select.appendChild(opt);
+    }
     refreshCabTriggerWords(row);
   });
 }
@@ -130,6 +135,14 @@ function cabWritePrompt(panel) {
   panel.querySelector('#cab-prompt').value = `${triggerLead}${scene}, ${medium}, coherent story moment, expressive subject, detailed environment, cinematic lighting, natural composition, sharp focus, high detail`;
 }
 
+function cabClearLora(row) {
+  row.querySelector('.cab-lora').value = '';
+  row.querySelector('.cab-strength').value = row.dataset.defaultStrength || '0.75';
+  row.dataset.triggerWords = '';
+  row.querySelector('.cab-trigger').textContent = 'No LoRA selected.';
+  row.querySelector('.cab-trigger').classList.remove('has-trigger');
+}
+
 function cabShowMedia(panel, detail) {
   const viewer = panel.querySelector('#cab-viewer');
   if (!detail?.url) return;
@@ -152,17 +165,34 @@ function buildPanel() {
   const toggle = el('button', { id: 'cab-toggle' }, 'Assistant Builder');
   const panel = el('section', { id: 'cab-panel' });
   panel.innerHTML = `
-    <header>
+    <header id="cab-drag-handle">
       <div>
         <h2>Comfy Assistant</h2>
-        <div class="cab-subtitle">Build, load, run, preview</div>
+        <div class="cab-subtitle">Floating workflow cockpit</div>
       </div>
-      <button class="cab-close" title="Hide">x</button>
+      <div class="cab-window-actions">
+        <button class="cab-mini" id="cab-collapse" title="Collapse">-</button>
+        <button class="cab-close" title="Hide">x</button>
+      </div>
     </header>
     <div class="body">
       <div class="cab-mode-strip">
         <button type="button" class="active" data-cab-media="image">Image</button>
         <button type="button" data-cab-media="video">Video</button>
+      </div>
+      <div class="cab-toolbar-grid">
+        <div>
+          <label>Quality</label>
+          <select id="cab-quality">
+            <option value="balanced" selected>Balanced</option>
+            <option value="max">Max Quality</option>
+            <option value="draft">Draft</option>
+          </select>
+        </div>
+        <div>
+          <label>Workflow name</label>
+          <input id="cab-name" value="Assistant Image">
+        </div>
       </div>
       <div class="cab-main-grid">
         <div class="cab-left">
@@ -210,6 +240,7 @@ function buildPanel() {
             <label>Strength</label>
             <input class="cab-strength" type="number" step="0.05" value="0.75">
           </div>
+          <button type="button" class="cab-clear-lora" title="Remove LoRA">Clear</button>
           <div class="cab-trigger">Choose a LoRA to see trigger words.</div>
         </div>
         <div class="row cab-lora-row" data-cab-lora-slot>
@@ -221,6 +252,7 @@ function buildPanel() {
             <label>Strength</label>
             <input class="cab-strength" type="number" step="0.05" value="0.45">
           </div>
+          <button type="button" class="cab-clear-lora" title="Remove LoRA">Clear</button>
           <div class="cab-trigger">No LoRA selected.</div>
         </div>
         <div class="row cab-lora-row" data-cab-lora-slot>
@@ -232,11 +264,10 @@ function buildPanel() {
             <label>Strength</label>
             <input class="cab-strength" type="number" step="0.05" value="0.30">
           </div>
+          <button type="button" class="cab-clear-lora" title="Remove LoRA">Clear</button>
           <div class="cab-trigger">No LoRA selected.</div>
         </div>
       </div>
-      <label>Workflow name</label>
-      <input id="cab-name" value="Assistant Flux LoRA">
       <div class="actions">
         <button id="cab-run">Build, Load + Run</button>
         <button id="cab-build">Build + Load</button>
@@ -244,6 +275,7 @@ function buildPanel() {
       </div>
       <pre id="cab-output">Waiting.</pre>
     </div>
+    <div id="cab-resize-handle" title="Resize"></div>
   `;
   document.body.append(toggle, panel);
 
@@ -262,11 +294,15 @@ function buildPanel() {
   panel.querySelector('#cab-write-prompt').addEventListener('click', () => cabWritePrompt(panel));
   cabTogglePromptComposer(panel);
   panel.querySelectorAll('[data-cab-lora-slot]').forEach(row => {
+    row.dataset.defaultStrength = row.querySelector('.cab-strength').value;
     row.querySelector('.cab-lora').addEventListener('change', () => refreshCabTriggerWords(row));
+    row.querySelector('.cab-clear-lora').addEventListener('click', () => cabClearLora(row));
   });
 
   toggle.addEventListener('click', () => panel.hidden = !panel.hidden);
   panel.querySelector('.cab-close').addEventListener('click', () => panel.hidden = true);
+  panel.querySelector('#cab-collapse').addEventListener('click', () => panel.classList.toggle('cab-collapsed'));
+  makeFloatingWindow(panel);
 
   async function build(mode) {
     output.textContent = 'Building...';
@@ -281,6 +317,7 @@ function buildPanel() {
       prompt: panel.querySelector('#cab-prompt').value,
       media_type: cabMediaType,
       recipe: panel.querySelector('#cab-recipe').value,
+      quality: panel.querySelector('#cab-quality').value,
       loras,
       lora: loras[0] ? loras[0].name : '',
       lora_strength: loras[0] ? loras[0].strength : 0.75,
@@ -350,6 +387,76 @@ function buildPanel() {
   window.addEventListener('CAB_EXECUTION_ERROR', event => {
     panel.querySelector('#cab-run-state').textContent = 'Error';
     output.textContent = `${output.textContent}\n\nExecution error: ${event.detail?.exception_message || 'ComfyUI execution failed'}`;
+  });
+}
+
+function makeFloatingWindow(panel) {
+  const handle = panel.querySelector('#cab-drag-handle');
+  const resize = panel.querySelector('#cab-resize-handle');
+  let drag = null;
+  let sizing = null;
+
+  const saved = JSON.parse(localStorage.getItem('cab_window_rect') || 'null');
+  if (saved) {
+    panel.style.left = `${saved.left}px`;
+    panel.style.top = `${saved.top}px`;
+    panel.style.width = `${saved.width}px`;
+    panel.style.height = `${saved.height}px`;
+    panel.style.right = 'auto';
+  }
+
+  function persist() {
+    const rect = panel.getBoundingClientRect();
+    localStorage.setItem('cab_window_rect', JSON.stringify({
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height
+    }));
+  }
+
+  handle.addEventListener('pointerdown', event => {
+    if (event.target.closest('button')) return;
+    const rect = panel.getBoundingClientRect();
+    drag = { x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+    handle.setPointerCapture(event.pointerId);
+  });
+
+  handle.addEventListener('pointermove', event => {
+    if (!drag) return;
+    const left = Math.max(8, Math.min(window.innerWidth - 220, drag.left + event.clientX - drag.x));
+    const top = Math.max(8, Math.min(window.innerHeight - 80, drag.top + event.clientY - drag.y));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.style.right = 'auto';
+  });
+
+  handle.addEventListener('pointerup', event => {
+    if (!drag) return;
+    drag = null;
+    handle.releasePointerCapture(event.pointerId);
+    persist();
+  });
+
+  resize.addEventListener('pointerdown', event => {
+    const rect = panel.getBoundingClientRect();
+    sizing = { x: event.clientX, y: event.clientY, width: rect.width, height: rect.height };
+    resize.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
+  resize.addEventListener('pointermove', event => {
+    if (!sizing) return;
+    panel.style.width = `${Math.max(520, sizing.width + event.clientX - sizing.x)}px`;
+    panel.style.height = `${Math.max(420, sizing.height + event.clientY - sizing.y)}px`;
+    panel.style.maxHeight = 'none';
+  });
+
+  resize.addEventListener('pointerup', event => {
+    if (!sizing) return;
+    sizing = null;
+    resize.releasePointerCapture(event.pointerId);
+    persist();
   });
 }
 

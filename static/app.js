@@ -45,6 +45,7 @@ function setMediaType(type) {
   if (recipe.selectedOptions[0]?.dataset.media !== mediaType) {
     recipe.value = mediaType === 'video' ? 'wan_t2v' : 'flux_lora';
   }
+  document.getElementById('name').value = mediaType === 'video' ? 'Assistant Video' : 'Assistant Image';
   populateLoraSlots();
 }
 
@@ -69,7 +70,7 @@ function populateLoraSlots() {
     select.innerHTML = '';
     const empty = document.createElement('option');
     empty.value = '';
-    empty.textContent = items.length ? (index === 0 ? 'Auto pick compatible LoRA' : 'None') : 'No compatible LoRAs for this recipe';
+    empty.textContent = items.length ? 'None - no LoRA' : 'No compatible LoRAs for this recipe';
     select.appendChild(empty);
     for (const item of items) {
       const opt = document.createElement('option');
@@ -77,15 +78,22 @@ function populateLoraSlots() {
       const trigger = item.trigger_words?.length ? ` - ${item.trigger_words.join(', ')}` : '';
       opt.textContent = `${item.name.replace(/\.safetensors$/i, '')} [${item.family}]${trigger}`;
       if (item.name === prior) opt.selected = true;
-      if (!prior && index === 0 && item.name.toLowerCase().includes('kwingo')) opt.selected = true;
       select.appendChild(opt);
     }
     if (!select.dataset.bound) {
       select.addEventListener('change', () => refreshTriggerWords(row));
+      row.querySelector('.lora-clear')?.addEventListener('click', () => clearLora(row));
       select.dataset.bound = 'true';
     }
     refreshTriggerWords(row);
   });
+}
+
+function clearLora(row) {
+  row.querySelector('.lora-select').value = '';
+  row.dataset.triggerWords = '';
+  row.querySelector('.trigger-words').textContent = 'No LoRA selected.';
+  row.querySelector('.trigger-words').classList.remove('has-trigger');
 }
 
 async function refreshTriggerWords(row) {
@@ -173,6 +181,7 @@ async function buildWorkflow() {
     prompt: document.getElementById('prompt').value,
     media_type: mediaType,
     recipe: document.getElementById('recipe').value,
+    quality: document.getElementById('quality').value,
     loras,
     lora: loras[0] ? loras[0].name : '',
     lora_strength: loras[0] ? loras[0].strength : 0.75,

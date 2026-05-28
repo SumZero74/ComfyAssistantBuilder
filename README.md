@@ -12,15 +12,19 @@ The assistant can build starter workflows for Flux image generation and Wan/LTXV
 ## Features
 
 - Image/video mode switch.
+- Strict media routing: image mode builds image workflows only, video mode builds video workflows only.
+- Quality presets that patch sampler, resolution, FPS, and frame settings.
 - Flux image workflows with optional LoRA stack.
 - Wan 2.2 and LTXV text-to-video starter workflows.
 - Local LoRA picker with trigger word detection from safetensors metadata.
+- Explicit LoRA clear controls so removing a selected LoRA really removes it from the next graph.
 - Prompt composer that can include selected LoRA trigger words.
 - Build and save workflow JSON files.
 - Symlink saved workflows into ComfyUI's workflow folder.
 - Chrome extension panel inside ComfyUI.
 - Build, load, and run from the assistant without manually importing JSON.
 - Live progress state, step counter, preview image, and final image/video display.
+- Floating, draggable, resizable assistant panel inside ComfyUI.
 
 ## Requirements
 
@@ -114,10 +118,11 @@ ComfyAssistantBuilder/chrome_extension
 3. Open `http://127.0.0.1:8188`.
 4. Click **Assistant Builder**.
 5. Choose **Image** or **Video**.
-6. Pick a recipe.
-7. Select LoRAs if needed.
-8. Write or compose a prompt.
-9. Click **Build, Load + Run**.
+6. Pick a quality preset.
+7. Pick a recipe.
+8. Select LoRAs if needed.
+9. Write or compose a prompt.
+10. Click **Build, Load + Run**.
 
 The assistant loads the generated workflow into the current ComfyUI canvas, queues it, tracks progress, and shows generated media in the preview window.
 
@@ -156,6 +161,18 @@ CAB_COMFY_API="http://127.0.0.1:8188" \
 - `LTXV text-to-video`
 
 If a mismatched recipe is selected, the backend normalizes it to the selected media type.
+
+The assistant also patches the prompt text into the positive prompt nodes before queueing. Selected LoRAs are written into the LoRA loader widgets in the generated graph. Empty LoRA slots stay empty.
+
+## Quality Presets
+
+The assistant has three quality presets:
+
+- `Draft`: lower step counts for quicker tests.
+- `Balanced`: practical defaults for normal use.
+- `Max Quality`: higher image/video sampler settings, larger video latent settings where the bundled workflow supports them, and MP4/H.264 video saving.
+
+Max Quality can take substantially longer and use more VRAM.
 
 ## Workflow Output Paths
 
@@ -242,6 +259,12 @@ cd ComfyAssistantBuilder
 - ComfyUI must emit preview/output events for the current workflow.
 - Final media should still appear when ComfyUI reports image/video outputs.
 - Video output depends on the video workflow/template saving a video file.
+
+**Video mode builds but ComfyUI reports missing models**
+
+- The assistant checks common loader nodes before returning the workflow.
+- Install the missing model file into the folder named in the error.
+- For Wan 2.2, the bundled workflow expects Wan diffusion models, a Wan VAE, and a Wan text encoder in the usual ComfyUI model folders.
 
 ## Notes For GitHub
 

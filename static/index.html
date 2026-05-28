@@ -30,6 +30,14 @@
 
         <div class="grid">
           <div class="field">
+            <label for="quality">Quality</label>
+            <select id="quality">
+              <option value="balanced" selected>Balanced</option>
+              <option value="max">Max Quality</option>
+              <option value="draft">Draft</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="recipe">Recipe</label>
             <select id="recipe">
               <option value="flux_lora" data-media="image">Flux image with LoRA stack</option>
@@ -49,24 +57,28 @@
             <label>LoRA 1</label>
             <select class="lora-select"></select>
             <input class="lora-strength" type="number" min="-2" max="2" step="0.05" value="0.75" aria-label="LoRA 1 strength">
+            <button class="lora-clear" type="button">Clear</button>
             <div class="trigger-words">Choose a LoRA to see trigger words.</div>
           </div>
           <div class="lora-row" data-lora-slot>
             <label>LoRA 2</label>
             <select class="lora-select"></select>
             <input class="lora-strength" type="number" min="-2" max="2" step="0.05" value="0.45" aria-label="LoRA 2 strength">
+            <button class="lora-clear" type="button">Clear</button>
             <div class="trigger-words">No LoRA selected.</div>
           </div>
           <div class="lora-row" data-lora-slot>
             <label>LoRA 3</label>
             <select class="lora-select"></select>
             <input class="lora-strength" type="number" min="-2" max="2" step="0.05" value="0.30" aria-label="LoRA 3 strength">
+            <button class="lora-clear" type="button">Clear</button>
             <div class="trigger-words">No LoRA selected.</div>
           </div>
           <div class="lora-row" data-lora-slot>
             <label>LoRA 4</label>
             <select class="lora-select"></select>
             <input class="lora-strength" type="number" min="-2" max="2" step="0.05" value="0.25" aria-label="LoRA 4 strength">
+            <button class="lora-clear" type="button">Clear</button>
             <div class="trigger-words">No LoRA selected.</div>
           </div>
         </div>

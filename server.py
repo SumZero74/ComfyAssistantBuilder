@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlparse
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
+TEMPLATE_DIR = APP_DIR / "templates"
 EXTENSION_CONFIG = APP_DIR / "chrome_extension" / "cab_config.js"
 COMFY_ROOT = Path(os.environ.get("CAB_COMFY_ROOT", str(Path.home() / "Documents/ComfyUI"))).expanduser()
 COMFY_WORKFLOWS = COMFY_ROOT / "user/default/workflows"
@@ -239,7 +240,7 @@ def classify_lora(name: str, metadata=None):
         return "Flux"
     if "wan" in text:
         return "Wan"
-    if "ltxv" in text or "ltx-video" in text:
+    if "ltxv" in text or "ltx-video" in text or "pytorch_lora_weights" in text:
         return "LTXV"
     if "sdxl" in text or "xl" in text or "stable-diffusion-xl" in text:
         return "SDXL"
@@ -408,7 +409,6 @@ def ensure_lora_compatible(name: str, recipe: str):
 
 
 def normalize_lora_slots(prompt, payload_loras, fallback_lora=None, fallback_strength=0.75, recipe="flux_lora"):
-    models = scan_models()
     slots = []
     if isinstance(payload_loras, list):
         for item in payload_loras:
@@ -426,6 +426,12 @@ def normalize_lora_slots(prompt, payload_loras, fallback_lora=None, fallback_str
     elif fallback_lora:
         ensure_lora_compatible(fallback_lora, recipe)
         slots.append({"name": fallback_lora, "strength": float(fallback_strength)})
+    return slots[:5]
+
+
+def auto_lora_slots(prompt, recipe="flux_lora", fallback_strength=0.75):
+    models = scan_models()
+    slots = []
     if not slots:
         compatible = [
             item["name"]
@@ -438,13 +444,23 @@ def normalize_lora_slots(prompt, payload_loras, fallback_lora=None, fallback_str
     return slots[:5]
 
 
-def flux_workflow(prompt, *, lora=None, loras=None, strength=0.75, with_lora=True, title="Flux Assistant Workflow"):
+def flux_workflow(
+    prompt,
+    *,
+    lora=None,
+    loras=None,
+    strength=0.75,
+    with_lora=True,
+    title="Flux Assistant Workflow",
+    quality="balanced",
+):
     models = scan_models()
     unet = pick(models["diffusion_models"], ["flux1-dev"], "flux1-dev.safetensors")
     clip_l = pick(models["text_encoders"], ["clip_l"], "clip_l.safetensors")
     t5 = pick(models["text_encoders"], ["t5xxl", "fp16"], "t5xxl_fp16.safetensors")
     vae = pick(models["vae"], ["ae"], "ae.safetensors")
     lora_slots = normalize_lora_slots(prompt, loras, lora, strength, recipe="flux_lora") if with_lora else []
+    profile = quality_profile(quality)
     positive = prompt.strip() or "photorealistic portrait, natural light, detailed eyes"
     if any("kwingo" in slot["name"].lower() for slot in lora_slots) and "wingo woman" not in positive.lower():
         positive = f"wingo woman, {positive}"
@@ -575,7 +591,7 @@ def flux_workflow(prompt, *, lora=None, loras=None, strength=0.75, with_lora=Tru
                     in_slot("latent_image", "LATENT", latent_link),
                 ],
                 outputs=[out_slot("LATENT", "LATENT", [sampled_link])],
-                widgets=[0, "randomize", 32 if with_lora else 36, 1, "euler", "simple", 1],
+                widgets=[0, "randomize", profile["flux_steps"], 1, "euler", "simple", 1],
             ),
             node(
                 vae_id,
@@ -641,26 +657,257 @@ def flux_workflow(prompt, *, lora=None, loras=None, strength=0.75, with_lora=Tru
     return workflow(title, nodes, links, note_id, image_link, family="Flux")
 
 
-def simple_placeholder_workflow(prompt, recipe):
-    """Use known local workflow templates for non-Flux model families."""
+QUALITY_PROFILES = {
+    "draft": {
+        "flux_steps": 24,
+        "wan_steps": 12,
+        "wan_split": 6,
+        "wan_cfg": 3.0,
+        "wan_width": 640,
+        "wan_height": 640,
+        "wan_fps": 16,
+        "wan_duration": 4,
+        "ltxv_steps": 24,
+        "ltxv_cfg": 3.0,
+        "ltxv_width": 768,
+        "ltxv_height": 512,
+        "ltxv_frames": 73,
+        "ltxv_fps": 24,
+    },
+    "balanced": {
+        "flux_steps": 32,
+        "wan_steps": 20,
+        "wan_split": 10,
+        "wan_cfg": 3.5,
+        "wan_width": 640,
+        "wan_height": 640,
+        "wan_fps": 16,
+        "wan_duration": 5,
+        "ltxv_steps": 30,
+        "ltxv_cfg": 3.0,
+        "ltxv_width": 768,
+        "ltxv_height": 512,
+        "ltxv_frames": 97,
+        "ltxv_fps": 24,
+    },
+    "max": {
+        "flux_steps": 40,
+        "wan_steps": 28,
+        "wan_split": 14,
+        "wan_cfg": 4.0,
+        "wan_width": 768,
+        "wan_height": 768,
+        "wan_fps": 16,
+        "wan_duration": 5,
+        "ltxv_steps": 40,
+        "ltxv_cfg": 3.5,
+        "ltxv_width": 960,
+        "ltxv_height": 640,
+        "ltxv_frames": 121,
+        "ltxv_fps": 24,
+    },
+}
+
+
+def quality_profile(value):
+    return QUALITY_PROFILES.get(str(value or "balanced").lower(), QUALITY_PROFILES["balanced"])
+
+
+def set_node_widget(node_data, index, value):
+    widgets = node_data.setdefault("widgets_values", [])
+    while len(widgets) <= index:
+        widgets.append(None)
+    widgets[index] = value
+
+
+def patch_prompt_nodes(wf, positive, negative=None):
+    for node_data in wf.get("nodes", []):
+        if node_data.get("type") != "CLIPTextEncode":
+            continue
+        title = str(node_data.get("title") or "").lower()
+        current = str((node_data.get("widgets_values") or [""])[0]).lower()
+        is_negative = "negative" in title or current.startswith("low quality") or "worst quality" in current
+        if is_negative:
+            if negative:
+                set_node_widget(node_data, 0, negative)
+        else:
+            set_node_widget(node_data, 0, positive)
+
+
+def patch_save_video_nodes(wf, prefix):
+    for node_data in wf.get("nodes", []):
+        if node_data.get("type") == "SaveVideo":
+            set_node_widget(node_data, 0, prefix)
+            set_node_widget(node_data, 1, "mp4")
+            set_node_widget(node_data, 2, "h264")
+
+
+def patch_power_lora_node(node_data, slots):
+    widgets = node_data.setdefault("widgets_values", [{}, {"type": "PowerLoraLoaderHeaderWidget"}])
+    while len(widgets) < 7:
+        widgets.append({})
+    for index in range(3):
+        if index < len(slots):
+            widgets[index + 2] = {
+                "on": True,
+                "lora": slots[index]["name"],
+                "strength": float(slots[index]["strength"]),
+                "strengthTwo": None,
+            }
+        else:
+            widgets[index + 2] = {"on": False, "lora": "None", "strength": 1, "strengthTwo": None}
+
+
+def wan_branch_lora_slots(slots, branch):
+    branch = branch.lower()
+    out = []
+    for slot in slots:
+        name = slot["name"].lower()
+        is_high = "high_noise" in name or "high-noise" in name or "highnoise" in name or "-high" in name or "_high" in name
+        is_low = "low_noise" in name or "low-noise" in name or "lownoise" in name or "-low" in name or "_low" in name
+        if branch == "high" and (is_high or not is_low):
+            out.append(slot)
+        elif branch == "low" and (is_low or not is_high):
+            out.append(slot)
+    return out
+
+
+def video_template_candidates(recipe):
     if recipe == "wan_t2v":
-        src = DESKTOP_WORKFLOWS / "Wan/video_wan2_2_14B_t2v.json"
-        family = "Wan"
+        return "Wan", [
+            TEMPLATE_DIR / "Wan/video_wan2_2_14B_t2v_flat.json",
+            DESKTOP_WORKFLOWS / "Wan/video_wan2_2_14B_t2v_flat.json",
+        ]
+    if recipe == "ltxv_t2v":
+        return "LTXV", [
+            TEMPLATE_DIR / "LTXV/ltxv_13b_text_to_video_lora.json",
+            DESKTOP_WORKFLOWS / "LTXV/LTXV 13B Text to Video with LoRA.json",
+        ]
+    raise ValueError(f"{recipe} is not a video recipe")
+
+
+def load_video_template(recipe):
+    family, candidates = video_template_candidates(recipe)
+    for src in candidates:
+        if src.exists():
+            return json.loads(src.read_text(encoding="utf-8")), family, src
+    checked = ", ".join(str(path) for path in candidates)
+    raise FileNotFoundError(f"No {family} video template found. Checked: {checked}")
+
+
+def patch_wan_template(wf, prompt, lora_slots, name, quality):
+    profile = quality_profile(quality)
+    patch_prompt_nodes(wf, prompt)
+    patch_save_video_nodes(wf, "video/Assistant_Wan")
+    for node_data in wf.get("nodes", []):
+        ntype = node_data.get("type")
+        title = str(node_data.get("title") or "")
+        if ntype == "Power Lora Loader (rgthree)":
+            branch = "high" if "high" in title.lower() else "low"
+            patch_power_lora_node(node_data, wan_branch_lora_slots(lora_slots, branch)[:3])
+        elif ntype == "PrimitiveBoolean" and "Lightning" in title:
+            set_node_widget(node_data, 0, False)
+        elif ntype == "PrimitiveInt" and "Steps" in title and "Split" not in title:
+            set_node_widget(node_data, 0, profile["wan_steps"])
+        elif ntype == "PrimitiveInt" and "Split" in title:
+            set_node_widget(node_data, 0, profile["wan_split"])
+        elif ntype == "PrimitiveFloat" and "CFG" in title:
+            set_node_widget(node_data, 0, profile["wan_cfg"])
+        elif ntype == "PrimitiveFloat" and "FPS" in title:
+            set_node_widget(node_data, 0, profile["wan_fps"])
+        elif ntype == "PrimitiveFloat" and "Duration" in title:
+            set_node_widget(node_data, 0, profile["wan_duration"])
+        elif ntype == "EmptyHunyuanLatentVideo":
+            set_node_widget(node_data, 0, profile["wan_width"])
+            set_node_widget(node_data, 1, profile["wan_height"])
+    wf.setdefault("extra", {}).setdefault("assistant_builder", {})
+    wf["extra"]["assistant_builder"].update(
+        {"media_type": "video", "recipe": "wan_t2v", "prompt": prompt, "name": name, "quality": quality}
+    )
+
+
+def patch_ltxv_template(wf, prompt, lora_slots, name, quality):
+    profile = quality_profile(quality)
+    patch_prompt_nodes(wf, prompt)
+    patch_save_video_nodes(wf, "video/Assistant_LTXV")
+    for node_data in wf.get("nodes", []):
+        ntype = node_data.get("type")
+        if ntype == "LoraLoaderModelOnly":
+            if lora_slots:
+                set_node_widget(node_data, 0, lora_slots[0]["name"])
+                set_node_widget(node_data, 1, float(lora_slots[0]["strength"]))
+            else:
+                set_node_widget(node_data, 1, 0.0)
+        elif ntype == "EmptyLTXVLatentVideo":
+            set_node_widget(node_data, 0, profile["ltxv_width"])
+            set_node_widget(node_data, 1, profile["ltxv_height"])
+            set_node_widget(node_data, 2, profile["ltxv_frames"])
+        elif ntype == "LTXVScheduler":
+            set_node_widget(node_data, 0, profile["ltxv_steps"])
+        elif ntype == "SamplerCustom":
+            set_node_widget(node_data, 3, profile["ltxv_cfg"])
+        elif ntype == "CreateVideo":
+            set_node_widget(node_data, 0, profile["ltxv_fps"])
+        elif ntype == "LTXVConditioning":
+            set_node_widget(node_data, 0, profile["ltxv_fps"])
+    wf.setdefault("extra", {}).setdefault("assistant_builder", {})
+    wf["extra"]["assistant_builder"].update(
+        {"media_type": "video", "recipe": "ltxv_t2v", "prompt": prompt, "name": name, "quality": quality}
+    )
+
+
+def validate_workflow_model_files(wf):
+    checks = {
+        "UNETLoader": ("diffusion_models", 0),
+        "CLIPLoader": ("text_encoders", 0),
+        "VAELoader": ("vae", 0),
+        "CheckpointLoaderSimple": ("checkpoints", 0),
+        "LoraLoaderModelOnly": ("loras", 0),
+    }
+    missing = []
+    for node_data in wf.get("nodes", []):
+        ntype = node_data.get("type")
+        if ntype not in checks:
+            continue
+        model_dir, widget_index = checks[ntype]
+        widgets = node_data.get("widgets_values") or []
+        if len(widgets) <= widget_index:
+            continue
+        model_name = str(widgets[widget_index] or "")
+        if not model_name or model_name == "None":
+            continue
+        if ntype == "LoraLoaderModelOnly":
+            strength = float(widgets[1] or 0) if len(widgets) > 1 else 1.0
+            if strength == 0 or "lightx2v" in model_name.lower():
+                continue
+        path = MODEL_DIRS[model_dir] / model_name
+        if not path.exists():
+            missing.append(f"{ntype}: {model_dir}/{model_name}")
+    for node_data in wf.get("nodes", []):
+        if node_data.get("type") != "Power Lora Loader (rgthree)":
+            continue
+        for item in (node_data.get("widgets_values") or [])[2:5]:
+            if not isinstance(item, dict) or not item.get("on"):
+                continue
+            model_name = str(item.get("lora") or "")
+            if model_name and model_name != "None" and not (MODEL_DIRS["loras"] / model_name).exists():
+                missing.append(f"Power LoRA: loras/{model_name}")
+    if missing:
+        raise FileNotFoundError("Missing required ComfyUI model files: " + "; ".join(missing))
+
+
+def video_workflow(prompt, *, recipe, loras=None, name="Assistant Video", quality="balanced"):
+    wf, family, src = load_video_template(recipe)
+    lora_slots = normalize_lora_slots(prompt, loras, recipe=recipe)
+    wf["id"] = slugify(name).lower().replace(" ", "-")
+    if recipe == "wan_t2v":
+        patch_wan_template(wf, prompt, lora_slots, name, quality)
     elif recipe == "ltxv_t2v":
-        src = DESKTOP_WORKFLOWS / "LTXV/LTXV 13B Text to Video with LoRA.json"
-        family = "LTXV"
-    else:
-        return flux_workflow(prompt, with_lora=False, title="Flux Base Assistant")
-    if src.exists():
-        data = json.loads(src.read_text(encoding="utf-8"))
-        data["id"] = f"assistant-{family.lower()}-{int(time.time())}"
-        data.setdefault("extra", {}).setdefault("assistant_builder", {})
-        data["extra"]["assistant_builder"] = {
-            "prompt": prompt,
-            "note": "Generated from a known-good local template.",
-        }
-        return data, family
-    return flux_workflow(prompt, with_lora=False, title="Flux Fallback Assistant")
+        patch_ltxv_template(wf, prompt, lora_slots, name, quality)
+    wf.setdefault("extra", {}).setdefault("assistant_builder", {})
+    wf["extra"]["assistant_builder"]["template"] = str(src)
+    validate_workflow_model_files(wf)
+    return wf, family
 
 
 def workflow(title, nodes, links, last_node_id, last_link_id, family):
@@ -714,13 +961,14 @@ def build_workflow(payload):
     prompt = payload.get("prompt", "")
     recipe = payload.get("recipe") or infer_recipe(prompt)
     media_type = normalize_media_type(payload.get("media_type"), recipe)
+    quality = str(payload.get("quality") or "balanced").lower()
     if media_type == "image" and recipe not in {"flux_lora", "flux_base"}:
         recipe = "flux_lora"
     elif media_type == "video" and recipe in {"flux_lora", "flux_base"}:
         recipe = "wan_t2v"
     name = slugify(payload.get("name") or f"Assistant {recipe} {int(time.time())}")
     if recipe == "flux_base":
-        wf, family = flux_workflow(prompt, with_lora=False, title=name)
+        wf, family = flux_workflow(prompt, with_lora=False, title=name, quality=quality)
     elif recipe == "flux_lora":
         strength = float(payload.get("lora_strength") or 0.75)
         wf, family = flux_workflow(
@@ -730,9 +978,16 @@ def build_workflow(payload):
             strength=strength,
             with_lora=True,
             title=name,
+            quality=quality,
         )
     else:
-        wf, family = simple_placeholder_workflow(prompt, recipe)
+        wf, family = video_workflow(
+            prompt,
+            recipe=recipe,
+            loras=payload.get("loras"),
+            name=name,
+            quality=quality,
+        )
     return wf, family, name
 
 

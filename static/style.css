@@ -106,13 +106,13 @@ p, .status {
 
 .lora-row {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 96px;
+  grid-template-columns: 72px minmax(0, 1fr) 96px 70px;
   gap: 8px;
   align-items: end;
 }
 
 .trigger-words {
-  grid-column: 2 / 4;
+  grid-column: 2 / 5;
   min-height: 34px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -121,6 +121,11 @@ p, .status {
   color: var(--muted);
   font-size: 13px;
   overflow-wrap: anywhere;
+}
+
+.lora-clear {
+  background: #243245;
+  color: var(--text);
 }
 
 .trigger-words.has-trigger {
