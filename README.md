@@ -15,12 +15,14 @@ The assistant can build starter workflows for Flux image generation and Wan/LTXV
 - Strict media routing: image mode builds image workflows only, video mode builds video workflows only.
 - Quality presets that patch sampler, resolution, FPS, and frame settings.
 - Flux image workflows with optional LoRA stack.
-- Wan 2.2 and LTXV text-to-video starter workflows.
+- Wan 2.2, Flux-style Wan, and LTXV text-to-video starter workflows.
 - Local LoRA picker with trigger word detection from safetensors metadata.
 - Explicit LoRA clear controls so removing a selected LoRA really removes it from the next graph.
 - Prompt composer that can include selected LoRA trigger words.
+- Optional local LLM prompt composer through a helper-server proxy.
 - Build and save workflow JSON files.
 - Symlink saved workflows into ComfyUI's workflow folder.
+- Build, save, and queue directly from the standalone assistant page.
 - Chrome extension panel inside ComfyUI.
 - Build, load, and run from the assistant without manually importing JSON.
 - Live progress state, step counter, preview image, and final image/video display.
@@ -163,6 +165,25 @@ CAB_COMFY_API="http://127.0.0.1:8188" \
 If a mismatched recipe is selected, the backend normalizes it to the selected media type.
 
 The assistant also patches the prompt text into the positive prompt nodes before queueing. Selected LoRAs are written into the LoRA loader widgets in the generated graph. Empty LoRA slots stay empty.
+
+The video recipe named `Flux-style video (Wan backend)` is a video-safe option for Flux-style prompting. It still builds and queues a Wan video graph because Flux itself is handled as an image model in this assistant.
+
+## LLM Prompt Composer
+
+The composer can call a local LLM endpoint to rewrite the selected LoRA trigger words and scene idea into a stronger generation prompt.
+
+Default local settings:
+
+- `CAB_LLM_ENDPOINT=http://127.0.0.1:11434/api/generate`
+- `CAB_LLM_MODEL=llama3.1`
+
+The helper only accepts local LLM endpoints by default. Trigger words are preserved in the final prompt.
+
+## Running Workflows
+
+The Chrome extension panel can build, load into the ComfyUI canvas, queue, and show live preview events.
+
+The standalone page can also use **Build, Save + Run**. That queues the generated API prompt directly to the configured ComfyUI API and returns the ComfyUI queue response.
 
 ## Quality Presets
 

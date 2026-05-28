@@ -137,6 +137,11 @@
   margin-bottom: 10px;
 }
 
+#cab-panel .cab-llm-row {
+  grid-template-columns: minmax(0, 160px) minmax(0, 1fr) 110px;
+  align-items: end;
+}
+
 #cab-panel .cab-viewer {
   min-height: 210px;
   height: 100%;

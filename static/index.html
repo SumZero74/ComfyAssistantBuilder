@@ -43,6 +43,7 @@
               <option value="flux_lora" data-media="image">Flux image with LoRA stack</option>
               <option value="flux_base" data-media="image">Flux base image</option>
               <option value="wan_t2v" data-media="video">Wan 2.2 text-to-video</option>
+              <option value="flux_wan_t2v" data-media="video">Flux-style video (Wan backend)</option>
               <option value="ltxv_t2v" data-media="video">LTXV text-to-video</option>
             </select>
           </div>
@@ -96,14 +97,26 @@
             <label for="creative-prompt">Prompt from selected LoRAs</label>
             <textarea id="creative-prompt" rows="4" placeholder="Select LoRAs, enable composer, then write a prompt." disabled></textarea>
           </div>
+          <div class="grid llm-grid">
+            <div class="field">
+              <label for="llm-model">LLM model</label>
+              <input id="llm-model" type="text" value="llama3.1" disabled>
+            </div>
+            <div class="field">
+              <label for="llm-endpoint">LLM endpoint</label>
+              <input id="llm-endpoint" type="text" value="http://127.0.0.1:11434/api/generate" disabled>
+            </div>
+          </div>
           <div class="actions prompt-actions">
             <button id="write-prompt" type="button" disabled>Write Prompt</button>
+            <button id="llm-write-prompt" type="button" disabled>LLM Write</button>
             <button id="use-prompt" type="button" disabled>Use Prompt</button>
           </div>
         </div>
 
         <div class="actions">
           <button id="build">Build + Save</button>
+          <button id="build-run">Build, Save + Run</button>
           <button id="download" disabled>Download JSON</button>
         </div>
       </section>
@@ -111,7 +124,7 @@
       <aside class="monitor">
         <h2>Run Monitor</h2>
         <div class="preview-window" id="preview-window">
-          <div class="empty-preview">Generated media appears here when run from the ComfyUI panel.</div>
+          <div class="empty-preview">Queued runs appear in ComfyUI. The overlay panel shows live previews.</div>
         </div>
         <div class="result">
           <h2>Result</h2>

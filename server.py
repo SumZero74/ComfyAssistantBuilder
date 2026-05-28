@@ -31,6 +31,9 @@ HOST = os.environ.get("CAB_HOST", "127.0.0.1")
 PORT = int(os.environ.get("CAB_PORT", "8797"))
 COMFY_API = os.environ.get("CAB_COMFY_API", "http://127.0.0.1:8188").rstrip("/")
 TOKEN_PATH = Path(os.environ.get("CAB_TOKEN_PATH", str(APP_DIR / ".cab_token"))).expanduser()
+LLM_ENDPOINT = os.environ.get("CAB_LLM_ENDPOINT", "http://127.0.0.1:11434/api/generate").strip()
+LLM_MODEL = os.environ.get("CAB_LLM_MODEL", "llama3.1").strip()
+LLM_API_KEY = os.environ.get("CAB_LLM_API_KEY", "").strip()
 
 
 MODEL_DIRS = {
@@ -91,6 +94,11 @@ def scan_models():
     data["lora_catalog"] = lora_catalog(data["loras"])
     data["workflow_root"] = str(DESKTOP_WORKFLOWS)
     data["comfy_workflows"] = str(COMFY_WORKFLOWS)
+    data["llm"] = {
+        "endpoint": LLM_ENDPOINT,
+        "model": LLM_MODEL,
+        "local_only": True,
+    }
     data["recipes"] = [
         {
             "id": "flux_lora",
@@ -114,6 +122,13 @@ def scan_models():
             "description": "Wan high-noise to low-noise text-to-video starter workflow.",
         },
         {
+            "id": "flux_wan_t2v",
+            "title": "Flux-style video (Wan backend)",
+            "media_type": "video",
+            "family": "Wan",
+            "description": "Flux-style prompt workflow that still queues a real Wan text-to-video graph.",
+        },
+        {
             "id": "ltxv_t2v",
             "title": "LTXV text-to-video",
             "media_type": "video",
@@ -127,7 +142,7 @@ def scan_models():
 def recipe_family(recipe: str) -> str:
     if recipe in {"flux_lora", "flux_base"}:
         return "Flux"
-    if recipe == "wan_t2v":
+    if recipe in {"wan_t2v", "flux_wan_t2v"}:
         return "Wan"
     if recipe == "ltxv_t2v":
         return "LTXV"
@@ -288,7 +303,7 @@ def lora_catalog(loras=None):
 def compatible_recipes_for_family(family: str):
     return {
         "Flux": ["flux_lora"],
-        "Wan": ["wan_t2v"],
+        "Wan": ["wan_t2v", "flux_wan_t2v"],
         "LTXV": ["ltxv_t2v"],
     }.get(family, [])
 
@@ -334,7 +349,7 @@ def normalize_media_type(value: str, recipe: str) -> str:
     text = str(value or "").strip().lower()
     if text in {"image", "video"}:
         return text
-    return "video" if recipe in {"wan_t2v", "ltxv_t2v"} else "image"
+    return "video" if recipe in {"wan_t2v", "flux_wan_t2v", "ltxv_t2v"} else "image"
 
 
 def best_lora_for_prompt(prompt: str, loras):
@@ -773,7 +788,7 @@ def wan_branch_lora_slots(slots, branch):
 
 
 def video_template_candidates(recipe):
-    if recipe == "wan_t2v":
+    if recipe in {"wan_t2v", "flux_wan_t2v"}:
         return "Wan", [
             TEMPLATE_DIR / "Wan/video_wan2_2_14B_t2v_flat.json",
             DESKTOP_WORKFLOWS / "Wan/video_wan2_2_14B_t2v_flat.json",
@@ -795,7 +810,7 @@ def load_video_template(recipe):
     raise FileNotFoundError(f"No {family} video template found. Checked: {checked}")
 
 
-def patch_wan_template(wf, prompt, lora_slots, name, quality):
+def patch_wan_template(wf, prompt, lora_slots, name, quality, recipe="wan_t2v"):
     profile = quality_profile(quality)
     patch_prompt_nodes(wf, prompt)
     patch_save_video_nodes(wf, "video/Assistant_Wan")
@@ -822,7 +837,7 @@ def patch_wan_template(wf, prompt, lora_slots, name, quality):
             set_node_widget(node_data, 1, profile["wan_height"])
     wf.setdefault("extra", {}).setdefault("assistant_builder", {})
     wf["extra"]["assistant_builder"].update(
-        {"media_type": "video", "recipe": "wan_t2v", "prompt": prompt, "name": name, "quality": quality}
+        {"media_type": "video", "recipe": recipe, "prompt": prompt, "name": name, "quality": quality}
     )
 
 
@@ -900,8 +915,8 @@ def video_workflow(prompt, *, recipe, loras=None, name="Assistant Video", qualit
     wf, family, src = load_video_template(recipe)
     lora_slots = normalize_lora_slots(prompt, loras, recipe=recipe)
     wf["id"] = slugify(name).lower().replace(" ", "-")
-    if recipe == "wan_t2v":
-        patch_wan_template(wf, prompt, lora_slots, name, quality)
+    if recipe in {"wan_t2v", "flux_wan_t2v"}:
+        patch_wan_template(wf, prompt, lora_slots, name, quality, recipe=recipe)
     elif recipe == "ltxv_t2v":
         patch_ltxv_template(wf, prompt, lora_slots, name, quality)
     wf.setdefault("extra", {}).setdefault("assistant_builder", {})
@@ -1009,12 +1024,180 @@ def save_workflow(wf, family, name):
     return path, link
 
 
+def workflow_link_map(wf):
+    out = {}
+    for link in wf.get("links", []):
+        if isinstance(link, dict):
+            out[link.get("id")] = [str(link.get("origin_id")), int(link.get("origin_slot") or 0)]
+        else:
+            out[link[0]] = [str(link[1]), int(link[2])]
+    return out
+
+
+def workflow_to_prompt(wf):
+    links = workflow_link_map(wf)
+    prompt = {}
+    for node_data in wf.get("nodes", []):
+        node_id = str(node_data.get("id"))
+        node_type = node_data.get("type")
+        if not node_id or not node_type or node_type in {"MarkdownNote", "Note"}:
+            continue
+        widgets = list(node_data.get("widgets_values") or [])
+        widget_index = 0
+        inputs = {}
+        for input_data in node_data.get("inputs") or []:
+            name = input_data.get("name")
+            if not name:
+                continue
+            link_id = input_data.get("link")
+            if link_id is not None and link_id in links:
+                inputs[name] = links[link_id]
+                if input_data.get("widget") and widget_index < len(widgets):
+                    widget_index += 1
+                continue
+            if input_data.get("widget") and widget_index < len(widgets):
+                inputs[name] = widgets[widget_index]
+                widget_index += 1
+        prompt[node_id] = {"class_type": node_type, "inputs": inputs}
+    return prompt
+
+
+def queue_workflow(wf):
+    prompt = workflow_to_prompt(wf)
+    if not prompt:
+        raise RuntimeError("Workflow did not produce an API prompt")
+    body = {
+        "prompt": prompt,
+        "client_id": "comfy-assistant-builder",
+        "extra_data": {"extra_pnginfo": {"workflow": wf}},
+    }
+    req = urlrequest.Request(
+        f"{COMFY_API}/prompt",
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urlrequest.urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def comfy_status():
     try:
         with urlrequest.urlopen(f"{COMFY_API}/system_stats", timeout=3) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except Exception as exc:
         return {"error": str(exc)}
+
+
+def local_llm_endpoint(endpoint: str) -> str:
+    endpoint = (endpoint or LLM_ENDPOINT).strip()
+    parsed = urlparse(endpoint)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("LLM endpoint must be http or https")
+    if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        raise ValueError("LLM endpoint must be local. Set CAB_LLM_ENDPOINT on the helper server for a different trusted endpoint.")
+    return endpoint
+
+
+def base_composer_prompt(scene, trigger_words, media_type, recipe):
+    trigger_lead = ", ".join(trigger_words)
+    medium = "text-to-video prompt" if media_type == "video" else "image prompt"
+    parts = []
+    if trigger_lead:
+        parts.append(trigger_lead)
+    parts.append(scene.strip() or "cinematic scene")
+    parts.extend(
+        [
+            medium,
+            "coherent subject and action",
+            "detailed environment",
+            "cinematic lighting",
+            "natural composition",
+            "high quality",
+        ]
+    )
+    if media_type == "video":
+        parts.extend(["clear motion", "stable identity", "smooth temporal consistency"])
+    if recipe == "flux_wan_t2v":
+        parts.append("Flux-style visual detail")
+    return ", ".join(parts)
+
+
+def extract_llm_text(data):
+    if isinstance(data, dict):
+        if isinstance(data.get("response"), str):
+            return data["response"]
+        message = data.get("message")
+        if isinstance(message, dict) and isinstance(message.get("content"), str):
+            return message["content"]
+        choices = data.get("choices")
+        if isinstance(choices, list) and choices:
+            first = choices[0]
+            if isinstance(first, dict):
+                if isinstance(first.get("text"), str):
+                    return first["text"]
+                msg = first.get("message")
+                if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                    return msg["content"]
+    return ""
+
+
+def compose_prompt(payload):
+    scene = str(payload.get("scene") or "").strip()
+    trigger_words = [str(item).strip() for item in payload.get("trigger_words") or [] if str(item).strip()]
+    media_type = normalize_media_type(payload.get("media_type"), payload.get("recipe") or "")
+    recipe = payload.get("recipe") or ("wan_t2v" if media_type == "video" else "flux_lora")
+    fallback = base_composer_prompt(scene, trigger_words, media_type, recipe)
+    endpoint = local_llm_endpoint(str(payload.get("endpoint") or LLM_ENDPOINT))
+    model = str(payload.get("model") or LLM_MODEL).strip() or LLM_MODEL
+    system = (
+        "You write concise production prompts for ComfyUI. "
+        "Return only the final prompt, one paragraph, comma-separated visual details. "
+        "Preserve every trigger word exactly. Do not add explanations, markdown, weights, or negative prompts."
+    )
+    user = (
+        f"Media type: {media_type}\n"
+        f"Recipe: {recipe}\n"
+        f"Trigger words that must be preserved: {', '.join(trigger_words) or 'none'}\n"
+        f"Scene idea: {scene or 'cinematic scene'}\n"
+        f"Baseline prompt to improve: {fallback}\n"
+    )
+    headers = {"Content-Type": "application/json"}
+    if LLM_API_KEY:
+        headers["Authorization"] = f"Bearer {LLM_API_KEY}"
+    if endpoint.rstrip("/").endswith("/chat/completions"):
+        body = {
+            "model": model,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "temperature": float(payload.get("temperature") or 0.7),
+            "stream": False,
+        }
+    else:
+        body = {
+            "model": model,
+            "prompt": f"{system}\n\n{user}",
+            "stream": False,
+            "options": {"temperature": float(payload.get("temperature") or 0.7)},
+        }
+    req = urlrequest.Request(endpoint, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST")
+    try:
+        with urlrequest.urlopen(req, timeout=45) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except URLError as exc:
+        raise RuntimeError(f"LLM composer failed: {exc}") from exc
+    text = re.sub(r"\s+", " ", extract_llm_text(data)).strip().strip('"')
+    if not text:
+        raise RuntimeError("LLM composer returned an empty prompt")
+    missing = [word for word in trigger_words if word.lower() not in text.lower()]
+    if missing:
+        text = f"{', '.join(missing)}, {text}"
+    return {
+        "ok": True,
+        "prompt": text,
+        "fallback_prompt": fallback,
+        "model": model,
+        "endpoint": endpoint,
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1092,6 +1275,30 @@ class Handler(BaseHTTPRequestHandler):
                         "comfy_link": str(link) if link else None,
                     }
                 )
+            if parsed.path == "/api/build-run":
+                if not self.authorized(payload):
+                    return self.json({"ok": False, "error": "unauthorized"}, code=401)
+                wf, family, name = build_workflow(payload)
+                saved = None
+                link = None
+                if payload.get("save", True):
+                    saved, link = save_workflow(wf, family, name)
+                queued = queue_workflow(wf)
+                return self.json(
+                    {
+                        "ok": True,
+                        "family": family,
+                        "name": name,
+                        "workflow": wf,
+                        "saved_path": str(saved) if saved else None,
+                        "comfy_link": str(link) if link else None,
+                        "queued": queued,
+                    }
+                )
+            if parsed.path == "/api/compose-prompt":
+                if not self.authorized(payload):
+                    return self.json({"ok": False, "error": "unauthorized"}, code=401)
+                return self.json(compose_prompt(payload))
             self.send_error(404)
         except Exception as exc:
             self.json({"ok": False, "error": str(exc)}, code=500)

@@ -122,8 +122,10 @@ function cabSelectedTriggerWords(panel) {
 
 function cabTogglePromptComposer(panel) {
   const enabled = panel.querySelector('#cab-enable-composer').checked;
-  panel.querySelector('#cab-scene').disabled = !enabled;
-  panel.querySelector('#cab-write-prompt').disabled = !enabled;
+  ['#cab-scene', '#cab-write-prompt', '#cab-write-llm', '#cab-llm-model', '#cab-llm-endpoint'].forEach(selector => {
+    const node = panel.querySelector(selector);
+    if (node) node.disabled = !enabled;
+  });
 }
 
 function cabWritePrompt(panel) {
@@ -131,8 +133,27 @@ function cabWritePrompt(panel) {
   const triggers = cabSelectedTriggerWords(panel);
   const triggerLead = triggers.length ? `${triggers.join(', ')}, ` : '';
   const recipe = panel.querySelector('#cab-recipe').value;
-  const medium = recipe === 'wan_t2v' || recipe === 'ltxv_t2v' ? 'text-to-video prompt' : 'image prompt';
+  const medium = recipe === 'wan_t2v' || recipe === 'flux_wan_t2v' || recipe === 'ltxv_t2v' ? 'text-to-video prompt' : 'image prompt';
   panel.querySelector('#cab-prompt').value = `${triggerLead}${scene}, ${medium}, coherent story moment, expressive subject, detailed environment, cinematic lighting, natural composition, sharp focus, high detail`;
+}
+
+async function cabWritePromptWithLlm(panel) {
+  const output = panel.querySelector('#cab-output');
+  output.textContent = 'Writing prompt with LLM...';
+  const data = await cabFetch('/api/compose-prompt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      scene: panel.querySelector('#cab-scene').value,
+      trigger_words: cabSelectedTriggerWords(panel),
+      media_type: cabMediaType,
+      recipe: panel.querySelector('#cab-recipe').value,
+      model: panel.querySelector('#cab-llm-model').value,
+      endpoint: panel.querySelector('#cab-llm-endpoint').value
+    })
+  });
+  panel.querySelector('#cab-prompt').value = data.prompt;
+  output.textContent = JSON.stringify({ composer: 'llm', model: data.model, endpoint: data.endpoint }, null, 2);
 }
 
 function cabClearLora(row) {
@@ -223,11 +244,23 @@ function buildPanel() {
           <button id="cab-write-prompt" type="button" disabled>Write</button>
         </div>
       </div>
+      <div class="row cab-llm-row">
+        <div>
+          <label>LLM model</label>
+          <input id="cab-llm-model" value="llama3.1" disabled>
+        </div>
+        <div>
+          <label>LLM endpoint</label>
+          <input id="cab-llm-endpoint" value="http://127.0.0.1:11434/api/generate" disabled>
+        </div>
+        <button id="cab-write-llm" type="button" disabled>LLM Write</button>
+      </div>
       <label>Recipe</label>
       <select id="cab-recipe">
         <option value="flux_lora" data-media="image">Flux image with LoRA stack</option>
         <option value="flux_base" data-media="image">Flux base image</option>
         <option value="wan_t2v" data-media="video">Wan 2.2 text-to-video</option>
+        <option value="flux_wan_t2v" data-media="video">Flux-style video (Wan backend)</option>
         <option value="ltxv_t2v" data-media="video">LTXV text-to-video</option>
       </select>
       <div class="cab-loras">
@@ -281,7 +314,11 @@ function buildPanel() {
 
   const output = panel.querySelector('#cab-output');
   loadCabModels()
-    .then(() => cabSetMediaType(panel, 'image'))
+    .then(models => {
+      panel.querySelector('#cab-llm-model').value = models.llm?.model || 'llama3.1';
+      panel.querySelector('#cab-llm-endpoint').value = models.llm?.endpoint || 'http://127.0.0.1:11434/api/generate';
+      cabSetMediaType(panel, 'image');
+    })
     .catch(err => output.textContent = `Server not ready: ${err.message}`);
   panel.querySelectorAll('[data-cab-media]').forEach(button => {
     button.addEventListener('click', () => cabSetMediaType(panel, button.dataset.cabMedia));
@@ -292,6 +329,11 @@ function buildPanel() {
   });
   panel.querySelector('#cab-enable-composer').addEventListener('change', () => cabTogglePromptComposer(panel));
   panel.querySelector('#cab-write-prompt').addEventListener('click', () => cabWritePrompt(panel));
+  panel.querySelector('#cab-write-llm').addEventListener('click', () => {
+    cabWritePromptWithLlm(panel).catch(err => {
+      output.textContent = err.stack || err.message;
+    });
+  });
   cabTogglePromptComposer(panel);
   panel.querySelectorAll('[data-cab-lora-slot]').forEach(row => {
     row.dataset.defaultStrength = row.querySelector('.cab-strength').value;

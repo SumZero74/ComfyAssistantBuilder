@@ -15,6 +15,8 @@ async function loadModels() {
   const status = document.getElementById('status');
   try {
     modelData = await getJSON('/api/models');
+    document.getElementById('llm-model').value = modelData.llm?.model || 'llama3.1';
+    document.getElementById('llm-endpoint').value = modelData.llm?.endpoint || 'http://127.0.0.1:11434/api/generate';
     document.getElementById('recipe').addEventListener('change', () => {
       syncMediaFromRecipe();
       populateLoraSlots();
@@ -151,9 +153,28 @@ function writePromptFromLoras() {
   const triggers = selectedTriggerWords();
   const triggerLead = triggers.length ? `${triggers.join(', ')}, ` : '';
   const recipe = document.getElementById('recipe').value;
-  const medium = recipe === 'wan_t2v' || recipe === 'ltxv_t2v' ? 'text-to-video prompt' : 'image prompt';
+  const medium = recipe === 'wan_t2v' || recipe === 'flux_wan_t2v' || recipe === 'ltxv_t2v' ? 'text-to-video prompt' : 'image prompt';
   const prompt = `${triggerLead}${scene}, ${medium}, coherent story moment, expressive subject, detailed environment, cinematic lighting, natural composition, sharp focus, high detail`;
   document.getElementById('creative-prompt').value = prompt;
+}
+
+async function writePromptWithLlm() {
+  const out = document.getElementById('output');
+  out.textContent = 'Writing prompt with LLM...';
+  const data = await getJSON('/api/compose-prompt', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      scene: document.getElementById('scene').value,
+      trigger_words: selectedTriggerWords(),
+      media_type: mediaType,
+      recipe: document.getElementById('recipe').value,
+      model: document.getElementById('llm-model').value,
+      endpoint: document.getElementById('llm-endpoint').value
+    })
+  });
+  document.getElementById('creative-prompt').value = data.prompt;
+  out.textContent = JSON.stringify({composer: 'llm', model: data.model, endpoint: data.endpoint}, null, 2);
 }
 
 function useCreativePrompt() {
@@ -165,19 +186,19 @@ function useCreativePrompt() {
 
 function togglePromptComposer() {
   const enabled = document.getElementById('enable-prompt-composer').checked;
-  for (const id of ['scene', 'creative-prompt', 'write-prompt', 'use-prompt']) {
+  for (const id of ['scene', 'creative-prompt', 'write-prompt', 'llm-write-prompt', 'use-prompt', 'llm-model', 'llm-endpoint']) {
     document.getElementById(id).disabled = !enabled;
   }
 }
 
-async function buildWorkflow() {
+function workflowPayload() {
   const loras = [...document.querySelectorAll('[data-lora-slot]')]
     .map(row => ({
       name: row.querySelector('.lora-select').value,
       strength: row.querySelector('.lora-strength').value
     }))
     .filter(slot => slot.name);
-  const payload = {
+  return {
     prompt: document.getElementById('prompt').value,
     media_type: mediaType,
     recipe: document.getElementById('recipe').value,
@@ -188,9 +209,13 @@ async function buildWorkflow() {
     name: document.getElementById('name').value,
     save: true
   };
+}
+
+async function buildWorkflow(run = false) {
+  const payload = workflowPayload();
   const out = document.getElementById('output');
-  out.textContent = 'Building...';
-  const data = await getJSON('/api/build', {
+  out.textContent = run ? 'Building and queueing...' : 'Building...';
+  const data = await getJSON(run ? '/api/build-run' : '/api/build', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload)
@@ -201,7 +226,8 @@ async function buildWorkflow() {
     saved_path: data.saved_path,
     comfy_link: data.comfy_link,
     family: data.family,
-    name: data.name
+    name: data.name,
+    queued: data.queued || null
   }, null, 2);
 }
 
@@ -221,8 +247,18 @@ document.getElementById('build').addEventListener('click', () => {
     document.getElementById('output').textContent = err.stack || err.message;
   });
 });
+document.getElementById('build-run').addEventListener('click', () => {
+  buildWorkflow(true).catch(err => {
+    document.getElementById('output').textContent = err.stack || err.message;
+  });
+});
 document.getElementById('download').addEventListener('click', downloadWorkflow);
 document.getElementById('write-prompt').addEventListener('click', writePromptFromLoras);
+document.getElementById('llm-write-prompt').addEventListener('click', () => {
+  writePromptWithLlm().catch(err => {
+    document.getElementById('output').textContent = err.stack || err.message;
+  });
+});
 document.getElementById('use-prompt').addEventListener('click', useCreativePrompt);
 document.getElementById('enable-prompt-composer').addEventListener('change', togglePromptComposer);
 togglePromptComposer();
